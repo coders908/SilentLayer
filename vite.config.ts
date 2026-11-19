@@ -6,5 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 9878,
+    allowedHosts: ['silentlayer.dpdns.org'],
+  },
+  preview: {
+    port: 9878,
+    allowedHosts: ['silentlayer.dpdns.org'],
   },
 });
