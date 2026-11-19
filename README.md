@@ -102,7 +102,7 @@ Open the printed URL, usually `http://localhost:9878`.
 
 ```bash
 npm run build
-npm run preview
+npm run start
 ```
 
 The production output goes to `dist/`.
@@ -204,7 +204,7 @@ src/
 | --- | --- |
 | `npm run dev` | Start the Vite dev server |
 | `npm run build` | Type-check with `tsc` and build to `dist/` |
-| `npm run preview` | Serve the built output locally |
+| `npm run start` | Serve the built output locally |
 
 ## Support
 
