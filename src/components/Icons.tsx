@@ -110,15 +110,6 @@ export function AlertIcon({ size = 24, className }: IconProps) {
   );
 }
 
-export function ShieldIcon({ size = 24, className }: IconProps) {
-  return (
-    <svg {...createIconProps(size)} className={className}>
-      <path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6l-7-3Z" />
-      <path d="m9 12 2 2 4-4" />
-    </svg>
-  );
-}
-
 export function WavesIcon({ size = 24, className }: IconProps) {
   return (
     <svg {...createIconProps(size)} className={className}>
@@ -142,6 +133,47 @@ export function SpinnerIcon({ size = 24, className }: IconProps) {
   return (
     <svg {...createIconProps(size)} className={className}>
       <path d="M21 12a9 9 0 1 1-4.5-7.8" />
+    </svg>
+  );
+}
+
+export function KeyIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg {...createIconProps(size)} className={className}>
+      <circle cx="8" cy="8" r="4.5" />
+      <path d="m11.2 11.2 8.3 8.3" />
+      <path d="m16 16 2-2" />
+      <path d="m19 19 2-2" />
+    </svg>
+  );
+}
+
+export function EyeIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg {...createIconProps(size)} className={className}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="2.75" />
+    </svg>
+  );
+}
+
+export function EyeOffIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg {...createIconProps(size)} className={className}>
+      <path d="M4 4.5 20 20.5" />
+      <path d="M9.6 6.2A9.9 9.9 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a18 18 0 0 1-3.4 4.2" />
+      <path d="M6.4 8.1A17.6 17.6 0 0 0 2.5 12S6 18.5 12 18.5a9.5 9.5 0 0 0 3.6-.7" />
+      <path d="M10.2 10.5a2.75 2.75 0 0 0 3.6 3.8" />
+    </svg>
+  );
+}
+
+export function GaugeIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg {...createIconProps(size)} className={className}>
+      <path d="M4 17a8 8 0 1 1 16 0" />
+      <path d="m12 13 3.5-3.5" />
+      <circle cx="12" cy="17" r="1.25" />
     </svg>
   );
 }

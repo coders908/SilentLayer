@@ -1,11 +1,19 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ActionButton from '../components/ActionButton';
 import FileDropZone from '../components/FileDropZone';
 import PageHero from '../components/PageHero';
-import { AlertIcon, CopyIcon, DownloadIcon, UnlockIcon } from '../components/Icons';
+import PassphraseField from '../components/PassphraseField';
+import {
+  AlertIcon,
+  CopyIcon,
+  DownloadIcon,
+  KeyIcon,
+  UnlockIcon,
+} from '../components/Icons';
 import { buildDecodedTextFileName, countCharacters, formatBytes } from '../lib/format';
 import { downloadBlob, loadImageFile, type LoadedImage } from '../lib/image';
 import { extractSecret } from '../lib/carrier';
+import { EnvelopeKeyError } from '../lib/envelope';
 import { decompressSecret, deserializeSecretContent } from '../lib/secret-payload';
 import type { HiddenAttachment } from '../lib/secret-payload';
 
@@ -17,12 +25,14 @@ interface RevealedResult {
 
 function DecodePage() {
   const [sourceImage, setSourceImage] = useState<LoadedImage | null>(null);
+  const [passphrase, setPassphrase] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
   const [result, setResult] = useState<RevealedResult | null>(null);
   const [copyFailed, setCopyFailed] = useState(false);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [needsPassphrase, setNeedsPassphrase] = useState(false);
 
   const previewUrlRef = useRef<string | null>(null);
 
@@ -55,6 +65,7 @@ function DecodePage() {
   const resetResult = () => {
     setResult(null);
     setCopyFailed(false);
+    setNeedsPassphrase(false);
   };
 
   const handleFileSelected = async (file: File) => {
@@ -71,7 +82,7 @@ function DecodePage() {
     }
   };
 
-  const handleReveal = async (): Promise<boolean> => {
+  const handleReveal = async (reportProgress: (ratio: number) => void): Promise<boolean> => {
     if (!sourceImage) {
       return false;
     }
@@ -79,11 +90,18 @@ function DecodePage() {
     setErrorMessage(null);
     resetResult();
     setIsRevealing(true);
+    reportProgress(0.05);
 
     try {
       const outcome = await extractSecret({
         pngBytes: sourceImage.fileBytes,
         imageData: sourceImage.imageData,
+        passphrase: passphrase.trim().length > 0 ? passphrase.trim() : null,
+        onProgress: (stage, ratio) => {
+          if (stage === 'embedding') {
+            reportProgress(0.1 + ratio * 0.8);
+          }
+        },
       });
 
       const plaintext = await decompressSecret(outcome.plaintext);
@@ -97,7 +115,15 @@ function DecodePage() {
 
       return true;
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Extraction failed.');
+      if (error instanceof EnvelopeKeyError) {
+        setNeedsPassphrase(true);
+        setErrorMessage(
+          'A payload was found, but the key does not open it. Check the passphrase and try again.',
+        );
+      } else {
+        setErrorMessage(error instanceof Error ? error.message : 'Opening the image failed.');
+      }
+
       return false;
     } finally {
       setIsRevealing(false);
@@ -145,33 +171,22 @@ function DecodePage() {
   return (
     <section className="page">
       <PageHero
-        eyebrow="Extract"
-        headline="Open a sealed image."
-        lead="Drop in any image this workspace produced and read what is inside it. Detection and decryption run on your machine - nothing is uploaded, and the picture itself never changes."
-        steps={[
-          {
-            label: 'Drop the image',
-            detail: 'The original PNG, or a copy that went through a chat app.',
-          },
-          {
-            label: 'Extract',
-            detail: 'Both layers are checked; whichever is intact opens the payload.',
-          },
-          {
-            label: 'Read or save',
-            detail: 'The message and any hidden file come back exactly as they went in.',
-          },
-        ]}
+        eyebrow="Reveal"
+        headline="Open an image that carries something."
+        lead="Drop in a sealed image and read what is inside it. Detection and decryption both run locally, and the picture you inspect is never modified."
       />
 
-      <div className="workspace">
+      <div className="panel-grid">
         <div className="panel">
-          <h2 className="panel__title">1. The image</h2>
+          <div className="panel__heading">
+            <span className="step-badge mono">01</span>
+            <h2 className="panel__title">The image</h2>
+          </div>
 
           <FileDropZone
             accept="image/*"
-            title={isReadingFile ? 'Reading the image…' : 'Drag an image here'}
-            hint="Works on an original PNG as well as on a copy that was JPEG-recompressed."
+            title={isReadingFile ? 'Reading the image…' : 'Drop the sealed image here'}
+            hint="Works on an untouched PNG and on a copy that went through a chat app."
             selectedFileName={sourceImage?.fileName ?? null}
             onFileSelected={(file) => void handleFileSelected(file)}
             disabled={isReadingFile || isRevealing}
@@ -205,8 +220,29 @@ function DecodePage() {
             </div>
           ) : null}
 
+          <div className="panel__heading">
+            <span className="step-badge mono">02</span>
+            <h2 className="panel__title">Key</h2>
+          </div>
+
+          <PassphraseField
+            value={passphrase}
+            onChange={(nextValue) => {
+              setPassphrase(nextValue);
+              setErrorMessage(null);
+            }}
+            label="Passphrase"
+            hint="Only needed if the sender used one. Leave empty for this build's key."
+            placeholder="Leave empty if there is none"
+            autoFocus={needsPassphrase}
+            disabled={isRevealing}
+          />
+
           {errorMessage ? (
-            <p className="alert alert--error" role="alert">
+            <p
+              className={`alert ${needsPassphrase ? 'alert--warning' : 'alert--error'}`}
+              role="alert"
+            >
               <AlertIcon size={16} className="alert__icon" />
               <span>{errorMessage}</span>
             </p>
@@ -215,7 +251,7 @@ function DecodePage() {
           <ActionButton
             variant="primary"
             idleLabel="Extract the content"
-            busyLabel="Decrypting…"
+            busyLabel="Decrypting"
             successLabel="Opened"
             idleIcon={<UnlockIcon size={15} />}
             onAction={handleReveal}
@@ -224,14 +260,18 @@ function DecodePage() {
         </div>
 
         <div className="panel panel--muted">
-          <h2 className="panel__title">2. What was hidden</h2>
+          <div className="panel__heading">
+            <span className="step-badge mono">03</span>
+            <h2 className="panel__title">What was hidden</h2>
+          </div>
 
           {result ? (
             <div className="decoded">
               <p className="channel-badge">
+                <span className="channel-badge__dot" aria-hidden="true" />
                 {result.channel === 'stealth'
-                  ? 'Read from the signature-free layer - an exact, byte-perfect recovery'
-                  : 'Read from the resilient layer - the image was recompressed and the content survived'}
+                  ? 'Recovered from the appended layer - byte-perfect'
+                  : 'Recovered from the frequency layer - the image was recompressed and still survived'}
               </p>
 
               {result.message ? (
@@ -274,13 +314,13 @@ function DecodePage() {
                     <p className="alert alert--warning" role="status">
                       <AlertIcon size={16} className="alert__icon" />
                       <span>
-                        The browser blocked automatic copying. Please select the text manually.
+                        The browser blocked automatic copying. Select the text and copy it manually.
                       </span>
                     </p>
                   ) : null}
                 </>
               ) : (
-                <p className="empty-state">No text message was hidden, only a file.</p>
+                <p className="empty-state">No text message was hidden - only a file.</p>
               )}
 
               {result.attachment ? (
@@ -316,7 +356,10 @@ function DecodePage() {
               ) : null}
             </div>
           ) : (
-            <p className="empty-state">The hidden content will appear here.</p>
+            <p className="empty-state">
+              <KeyIcon size={16} className="empty-state__icon" />
+              Anything hidden in the image appears here after a successful extraction.
+            </p>
           )}
         </div>
       </div>

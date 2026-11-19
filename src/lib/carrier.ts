@@ -1,5 +1,5 @@
 
-import { openEnvelope, sealEnvelope } from './envelope';
+import { EnvelopeKeyError, openEnvelope, sealEnvelope } from './envelope';
 import { deriveScatterSeed } from './keyvault';
 import {
   ECC_ENCODED_BLOCK_BYTES,
@@ -9,19 +9,18 @@ import {
   parseLengthPrefix,
   payloadCapacityFor,
 } from './ecc-framing';
-import {
-  bytesToBits,
-  bitsToBytes,
-  decideBitsFromChips,
-  embedBitsIntoPlane,
-  extractChipsFromPlane,
-  toLuminancePlane,
-  applyLuminanceDelta,
-  getCarrierGeometry,
-} from './spectral-carrier';
+import { getCarrierGeometry, toLuminancePlane, applyLuminanceDelta } from './image-plane';
+import { embedBitsInWorker, extractBitsInWorker } from './spectral-client';
+import { bitsToBytes, bytesToBits } from './spectral-kernel';
+
+export { getCarrierGeometry } from './image-plane';
 
 const TRAILER_LENGTH_BYTES = 4;
 const PNG_SIGNATURE_LENGTH = 8;
+
+export type ProgressStage = 'preparing' | 'encrypting' | 'embedding';
+
+export type ProgressListener = (stage: ProgressStage, ratio: number) => void;
 
 export class CarrierError extends Error {
   constructor(message: string) {
@@ -157,6 +156,8 @@ export interface EmbedOptions {
   imageData: ImageData;
   plaintext: Uint8Array;
   includeRuggedChannel: boolean;
+  passphrase?: string | null;
+  onProgress?: ProgressListener;
 }
 
 export interface EmbedOutcome {
@@ -167,7 +168,11 @@ export interface EmbedOutcome {
 }
 
 export async function embedSecret(options: EmbedOptions): Promise<EmbedOutcome> {
-  const envelope = await sealEnvelope(options.plaintext);
+  options.onProgress?.('encrypting', 0);
+
+  const envelope = await sealEnvelope(options.plaintext, {
+    passphrase: options.passphrase ?? null,
+  });
   const scatterSeed = await deriveScatterSeed();
 
   let ruggedChannelUsed = false;
@@ -181,14 +186,27 @@ export async function embedSecret(options: EmbedOptions): Promise<EmbedOutcome> 
 
   if (options.includeRuggedChannel && spectralFits) {
     try {
-      const bits = bytesToBits(framedForSpectral);
+      options.onProgress?.('embedding', 0);
+
       const originalPlane = toLuminancePlane(options.imageData);
-      const modifiedPlane = embedBitsIntoPlane(originalPlane, bits, scatterSeed);
-      const carriedImageData = applyLuminanceDelta(
-        options.imageData,
-        originalPlane,
-        modifiedPlane,
+      const bits = bytesToBits(framedForSpectral);
+
+      const carriedValues = await embedBitsInWorker(
+        {
+          width: originalPlane.width,
+          height: originalPlane.height,
+          values: new Float32Array(originalPlane.values),
+        },
+        bits,
+        scatterSeed,
+        (ratio) => options.onProgress?.('embedding', ratio),
       );
+
+      const carriedImageData = applyLuminanceDelta(options.imageData, originalPlane, {
+        width: originalPlane.width,
+        height: originalPlane.height,
+        values: carriedValues,
+      });
 
       carrierPngBytes = await rasterizeImageData(carriedImageData);
       ruggedChannelUsed = true;
@@ -211,6 +229,8 @@ export async function embedSecret(options: EmbedOptions): Promise<EmbedOutcome> 
 export interface ExtractOptions {
   pngBytes: Uint8Array;
   imageData: ImageData;
+  passphrase?: string | null;
+  onProgress?: ProgressListener;
 }
 
 export interface ExtractOutcome {
@@ -224,12 +244,19 @@ export async function extractSecret(options: ExtractOptions): Promise<ExtractOut
   if (stealthEnvelope) {
     try {
       return {
-        plaintext: await openEnvelope(stealthEnvelope),
+        plaintext: await openEnvelope(stealthEnvelope, {
+          passphrase: options.passphrase ?? null,
+        }),
         channel: 'stealth',
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof EnvelopeKeyError) {
+        throw error;
+      }
     }
   }
+
+  options.onProgress?.('embedding', 0);
 
   const scatterSeed = await deriveScatterSeed();
   const plane = toLuminancePlane(options.imageData);
@@ -239,9 +266,13 @@ export async function extractSecret(options: ExtractOptions): Promise<ExtractOut
     throw new CarrierError('The image is too small to hold a frequency layer.');
   }
 
-  const prefixChips = extractChipsFromPlane(plane, LENGTH_PREFIX_TOTAL_BYTES * 8, scatterSeed);
+  const prefixBits = await extractBitsInWorker(
+    { width: plane.width, height: plane.height, values: new Float32Array(plane.values) },
+    LENGTH_PREFIX_TOTAL_BYTES * 8,
+    scatterSeed,
+  );
   const prefixBytes = bitsToBytes(
-    decideBitsFromChips(prefixChips, LENGTH_PREFIX_TOTAL_BYTES * 8),
+    prefixBits,
     LENGTH_PREFIX_TOTAL_BYTES,
   );
 
@@ -263,8 +294,13 @@ export async function extractSecret(options: ExtractOptions): Promise<ExtractOut
     throw new CarrierError('The hidden content is larger than this image can carry.');
   }
 
-  const bodyChips = extractChipsFromPlane(plane, totalBytes * 8, scatterSeed);
-  const allBytes = bitsToBytes(decideBitsFromChips(bodyChips, totalBytes * 8), totalBytes);
+  const bodyBits = await extractBitsInWorker(
+    { width: plane.width, height: plane.height, values: new Float32Array(plane.values) },
+    totalBytes * 8,
+    scatterSeed,
+    (ratio) => options.onProgress?.('embedding', ratio),
+  );
+  const allBytes = bitsToBytes(bodyBits, totalBytes);
   const body = allBytes.subarray(LENGTH_PREFIX_TOTAL_BYTES);
 
   const payload = decodeBody(body);
@@ -276,7 +312,7 @@ export async function extractSecret(options: ExtractOptions): Promise<ExtractOut
   }
 
   return {
-    plaintext: await openEnvelope(payload),
+    plaintext: await openEnvelope(payload, { passphrase: options.passphrase ?? null }),
     channel: 'rugged',
   };
 }

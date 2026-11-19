@@ -1,12 +1,15 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ActionButton from '../components/ActionButton';
 import FileDropZone from '../components/FileDropZone';
 import PageHero from '../components/PageHero';
+import PassphraseField from '../components/PassphraseField';
 import {
   AlertIcon,
   DownloadIcon,
+  GaugeIcon,
+  KeyIcon,
+  LayersIcon,
   LockIcon,
-  ShieldIcon,
   TrashIcon,
   WavesIcon,
 } from '../components/Icons';
@@ -23,7 +26,11 @@ import { embedSecret, getRuggedCapacity } from '../lib/carrier';
 import { encodedLengthFor } from '../lib/ecc-framing';
 import { compressSecret, serializeSecretContent } from '../lib/secret-payload';
 import { getEnvelopeOverhead } from '../lib/envelope';
-import { isUsingDevelopmentKey } from '../lib/keyvault';
+import {
+  MIN_PASSPHRASE_LENGTH,
+  isUsingDevelopmentKey,
+  isValidPassphrase,
+} from '../lib/keyvault';
 
 interface SealedResult {
   pngBytes: Uint8Array;
@@ -31,7 +38,7 @@ interface SealedResult {
   fileName: string;
   stealthByteLength: number;
   ruggedChannelUsed: boolean;
-  channelCount: number;
+  passphraseProtected: boolean;
 }
 
 interface AttachmentState {
@@ -45,6 +52,7 @@ function EncodePage() {
   const [coverImage, setCoverImage] = useState<LoadedImage | null>(null);
   const [message, setMessage] = useState('');
   const [attachment, setAttachment] = useState<AttachmentState | null>(null);
+  const [passphrase, setPassphrase] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isReadingImage, setIsReadingImage] = useState(false);
   const [isReadingAttachment, setIsReadingAttachment] = useState(false);
@@ -84,17 +92,13 @@ function EncodePage() {
     const capacity = getRuggedCapacity(
       coverImage.imageData.width,
       coverImage.imageData.height,
-      0,
+      getEnvelopeOverhead(),
     );
 
-    return {
-      ...capacity,
-      usableBytes: Math.max(0, capacity.usableBytes - getEnvelopeOverhead()),
-    };
+    return capacity;
   }, [coverImage]);
 
-  const ruggedFitsHardLimit =
-    ruggedCapacity !== null && ruggedCapacity.usableBytes > 0;
+  const ruggedAvailable = ruggedCapacity !== null && ruggedCapacity.usableBytes > 0;
 
   const clearResult = () => setResult(null);
 
@@ -132,7 +136,7 @@ function EncodePage() {
     }
   };
 
-  const handleSeal = async (): Promise<boolean> => {
+  const handleSeal = async (reportProgress: (ratio: number) => void): Promise<boolean> => {
     if (!coverImage) {
       return false;
     }
@@ -142,6 +146,8 @@ function EncodePage() {
     setIsSealing(true);
 
     try {
+      reportProgress(0.04);
+
       const plaintext = await compressSecret(
         serializeSecretContent({
           message,
@@ -159,17 +165,29 @@ function EncodePage() {
       const capacity = getRuggedCapacity(
         coverImage.imageData.width,
         coverImage.imageData.height,
-        0,
+        getEnvelopeOverhead(),
       );
       const includeRuggedChannel = encodedLengthFor(sealedLength) <= capacity.capacityInBytes;
 
       const basePngBytes = await getPngBytesForImage(coverImage);
+      const trimmedPassphrase = passphrase.trim();
 
       const outcome = await embedSecret({
         pngBytes: basePngBytes,
         imageData: coverImage.imageData,
         plaintext,
         includeRuggedChannel,
+        passphrase: trimmedPassphrase.length > 0 ? trimmedPassphrase : null,
+        onProgress: (stage, ratio) => {
+          if (stage === 'encrypting') {
+            reportProgress(0.12);
+            return;
+          }
+
+          if (stage === 'embedding') {
+            reportProgress(0.2 + ratio * 0.75);
+          }
+        },
       });
 
       setResult({
@@ -178,7 +196,7 @@ function EncodePage() {
         fileName: buildEncodedFileName(coverImage.fileName),
         stealthByteLength: outcome.stealthByteLength,
         ruggedChannelUsed: outcome.ruggedChannelUsed,
-        channelCount: outcome.ruggedChannelUsed ? 2 : 1,
+        passphraseProtected: trimmedPassphrase.length > 0,
       });
 
       return true;
@@ -199,50 +217,41 @@ function EncodePage() {
   };
 
   const hasContent = message.trim().length > 0 || attachment !== null;
-  const canSeal = Boolean(coverImage) && hasContent;
+  const passphraseIsTooShort =
+    passphrase.trim().length > 0 && !isValidPassphrase(passphrase);
+  const canSeal = Boolean(coverImage) && hasContent && !passphraseIsTooShort;
 
   return (
     <section className="page">
       <PageHero
-        eyebrow="Embed"
-        headline="Put a message inside a picture."
-        lead="Upload any photo, attach what you want to hide, and download an image that looks exactly the same. The text and files travel inside it, encrypted, and only this workspace can open them again."
-        steps={[
-          {
-            label: 'Choose a photo',
-            detail: 'Any picture works. It becomes the envelope everything rides in.',
-          },
-          {
-            label: 'Write a message or attach a file',
-            detail: 'Text, a PDF, a ZIP - it all gets packed in before anything is written.',
-          },
-          {
-            label: 'Download the sealed image',
-            detail: 'Send it anywhere. Pixels stay untouched; the payload sits outside them.',
-          },
-        ]}
+        eyebrow="Hide"
+        headline="A message that travels inside the picture."
+        lead="Choose a photo, write what you want to keep private, and download an image that looks unchanged. The text and any attached file are encrypted before they are written, and nothing ever leaves your browser."
       />
 
       {usesDevKey ? (
         <p className="alert alert--error" role="alert">
           <AlertIcon size={16} className="alert__icon" />
           <span>
-          The built-in key is the public default. Set{' '}
-          <code className="mono">VITE_SILENTLAYER_WORKSPACE_KEY</code> in a{' '}
-          <code className="mono">.env</code> file and rebuild, otherwise anyone who has the
-          site can extract your content.
+            This build is using the public default workspace key. Set{' '}
+            <code className="mono">VITE_SILENTLAYER_WORKSPACE_KEY</code> in{' '}
+            <code className="mono">.env</code> and rebuild, or use a passphrase below - otherwise
+            anyone who can serve this site can read the images it produces.
           </span>
         </p>
       ) : null}
 
-      <div className="workspace">
+      <div className="panel-grid">
         <div className="panel">
-          <h2 className="panel__title">1. Cover image</h2>
+          <div className="panel__heading">
+            <span className="step-badge mono">01</span>
+            <h2 className="panel__title">Cover image</h2>
+          </div>
 
           <FileDropZone
             accept="image/png,image/jpeg,image/webp,image/bmp,image/gif,image/avif"
-            title={isReadingImage ? 'Reading the image…' : 'Drag an image here or click to browse'}
-            hint="A PNG is kept exactly as is. Other formats are converted once to lossless PNG."
+            title={isReadingImage ? 'Reading the image…' : 'Drop an image, or click to browse'}
+            hint="PNG stays byte-identical. Every other format is converted once to lossless PNG."
             selectedFileName={coverImage?.fileName ?? null}
             onFileSelected={(file) => void handleCoverSelected(file)}
             disabled={isReadingImage || isSealing}
@@ -253,7 +262,7 @@ function EncodePage() {
               <img
                 className="thumbnail"
                 src={coverImage.previewUrl}
-                alt="Preview of the cover image"
+                alt="Preview of the chosen cover image"
               />
               <dl className="meta-list">
                 <div>
@@ -263,23 +272,26 @@ function EncodePage() {
                   </dd>
                 </div>
                 <div>
-                  <dt>Resilient layer capacity</dt>
+                  <dt>Resilient layer</dt>
                   <dd className="mono" dir="ltr">
                     {ruggedCapacity ? formatBytes(ruggedCapacity.usableBytes) : '-'}
                   </dd>
                 </div>
                 <div>
-                  <dt>Preservation</dt>
-                  <dd>{coverImage.isPng ? 'Identical pixels' : 'One-time conversion'}</dd>
+                  <dt>Pixels</dt>
+                  <dd>{coverImage.isPng ? 'Untouched' : 'Converted once'}</dd>
                 </div>
               </dl>
             </div>
           ) : null}
 
-          <h2 className="panel__title">2. What to hide</h2>
+          <div className="panel__heading">
+            <span className="step-badge mono">02</span>
+            <h2 className="panel__title">What to hide</h2>
+          </div>
 
           <label className="field">
-            <span className="field__label">Message (no length limit)</span>
+            <span className="field__label">Message</span>
             <textarea
               className="field__textarea"
               value={message}
@@ -288,7 +300,7 @@ function EncodePage() {
                 clearResult();
                 setErrorMessage(null);
               }}
-              placeholder="Type anything here…"
+              placeholder="Write anything. Only someone with the key can read it."
               rows={6}
               disabled={isSealing}
             />
@@ -306,14 +318,17 @@ function EncodePage() {
 
           <div className="attachment-block">
             <div className="attachment-block__header">
-              <span className="field__label">Hidden file (optional)</span>
+              <span className="attachment-block__label">
+                <span className="field__label">Hidden file</span>
+                <span className="optional-pill">Optional</span>
+              </span>
               <span className="field__hint">An image inside an image, a PDF, a ZIP</span>
             </div>
 
             <FileDropZone
               accept="*/*"
-              title={isReadingAttachment ? 'Reading the file…' : 'Add a file to hide'}
-              hint="The file itself is never visible in the image."
+              title={isReadingAttachment ? 'Reading the file…' : 'Attach a file to carry along'}
+              hint="Compressed and encrypted together with the message."
               selectedFileName={
                 attachment ? `${attachment.fileName} · ${formatBytes(attachment.byteLength)}` : null
               }
@@ -339,13 +354,49 @@ function EncodePage() {
             ) : null}
           </div>
 
-          {coverImage && !ruggedFitsHardLimit ? (
+          <div className="panel__heading">
+            <span className="step-badge mono">03</span>
+            <h2 className="panel__title">Protection</h2>
+          </div>
+
+          <PassphraseField
+            value={passphrase}
+            onChange={(nextValue) => {
+              setPassphrase(nextValue);
+              clearResult();
+            }}
+            label="Passphrase"
+            hint="Without a passphrase the image can be decoded by anyone who holds this build."
+            placeholder="Leave empty to use this build's key"
+            minLength={MIN_PASSPHRASE_LENGTH}
+            disabled={isSealing}
+          />
+
+          {passphrase.trim().length === 0 ? (
+            <p className="alert alert--neutral">
+              <LockIcon size={16} className="alert__icon alert__icon--muted" />
+              <span>
+                Sealed with this build&apos;s key only. Anyone who has the same deployment can open
+                the image - use a passphrase for anything you send outside it.
+              </span>
+            </p>
+          ) : (
+            <p className="alert alert--success">
+              <KeyIcon size={16} className="alert__icon" />
+              <span>
+                Key derived with PBKDF2-HMAC-SHA-256, {MIN_PASSPHRASE_LENGTH}+ characters, random
+                salt per image. Only this passphrase can reopen it.
+              </span>
+            </p>
+          )}
+
+          {coverImage && !ruggedAvailable ? (
             <p className="alert alert--warning">
               <AlertIcon size={16} className="alert__icon" />
               <span>
-                This image is too small to carry the recompression-resilient layer. The content
-                will be hidden in the signature-free layer only - it survives any viewing, but
-                not a conversion to JPEG.
+                This image is too small for the compression-resistant layer. The content will be
+                hidden in the appended layer only - invisible to a viewer, but not to a JPEG
+                re-encode.
               </span>
             </p>
           ) : null}
@@ -360,7 +411,7 @@ function EncodePage() {
           <ActionButton
             variant="primary"
             idleLabel="Hide in the image"
-            busyLabel="Sealing and hiding…"
+            busyLabel="Sealing"
             successLabel="Sealed"
             idleIcon={<LockIcon size={15} />}
             onAction={handleSeal}
@@ -369,7 +420,10 @@ function EncodePage() {
         </div>
 
         <div className="panel panel--muted">
-          <h2 className="panel__title">3. The protected image</h2>
+          <div className="panel__heading">
+            <span className="step-badge mono">04</span>
+            <h2 className="panel__title">The sealed image</h2>
+          </div>
 
           {result ? (
             <div className="result">
@@ -381,27 +435,34 @@ function EncodePage() {
 
               <ul className="result__facts">
                 <li>
-                  <ShieldIcon size={14} className="fact__icon" />
-                  <span>No signature, no chunk name, and no header that a scan could identify.</span>
-                </li>
-                <li>
-                  <LockIcon size={14} className="fact__icon" />
+                  <LayersIcon size={14} className="fact__icon" />
                   <span>
-                    {result.channelCount} {result.channelCount === 1 ? 'layer' : 'layers'} written
-                    · {formatBytes(result.stealthByteLength)} encrypted
+                    Written to{' '}
+                    {result.ruggedChannelUsed ? 'both layers' : 'the appended layer'} ·{' '}
+                    {formatBytes(result.stealthByteLength)} of ciphertext
                   </span>
                 </li>
                 <li>
                   <WavesIcon size={14} className="fact__icon" />
                   <span>
                     {result.ruggedChannelUsed
-                      ? 'The resilient layer is active - it survives strong JPEG recompression.'
-                      : 'The resilient layer did not fit because the content is too large, so only the signature-free layer was written.'}
+                      ? 'The resilient layer is active and survives strong JPEG recompression.'
+                      : 'The payload exceeded this image\u2019s resilient capacity, so only the appended layer was used.'}
                   </span>
                 </li>
                 <li>
-                  <ShieldIcon size={14} className="fact__icon" />
-                  <span>It looks identical to the original; there is no visual sign of content.</span>
+                  <KeyIcon size={14} className="fact__icon" />
+                  <span>
+                    {result.passphraseProtected
+                      ? 'Locked with your passphrase - share it separately from the image.'
+                      : 'Locked with this build\u2019s key. Anyone on this deployment can open it.'}
+                  </span>
+                </li>
+                <li>
+                  <GaugeIcon size={14} className="fact__icon" />
+                  <span>
+                    Opening the file in any normal viewer shows the original picture unchanged.
+                  </span>
                 </li>
               </ul>
 
@@ -424,8 +485,8 @@ function EncodePage() {
             </div>
           ) : (
             <p className="empty-state">
-              Once you hide something, the image will appear here with a download button. It
-              will look identical to the original.
+              The sealed image appears here with a download button. Pixels in the visible picture
+              never change.
             </p>
           )}
         </div>

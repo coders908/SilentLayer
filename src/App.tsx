@@ -1,4 +1,4 @@
-import { HashRouter, NavLink, Route, Routes } from 'react-router-dom';
+import { HashRouter, Link, NavLink, Route, Routes } from 'react-router-dom';
 import EncodePage from './pages/EncodePage';
 import DecodePage from './pages/DecodePage';
 import { MarkGlyph } from './components/Icons';
@@ -8,23 +8,34 @@ function App() {
     <HashRouter>
       <div className="app-shell">
         <header className="site-header">
-          <div className="brand">
+          <Link to="/" className="brand">
             <span className="brand-mark">
               <MarkGlyph size={14} />
             </span>
             <span className="brand-text">
               <strong>SilentLayer</strong>
             </span>
-          </div>
+          </Link>
 
-          <nav className="site-nav" aria-label="Main navigation">
-            <NavLink to="/" end className="nav-link">
-              Hide
-            </NavLink>
-            <NavLink to="/decode" className="nav-link">
-              Reveal
-            </NavLink>
-          </nav>
+          <div className="site-header__aside">
+            <nav className="site-nav" aria-label="Main navigation">
+              <NavLink to="/" end className="nav-link">
+                Hide
+              </NavLink>
+              <NavLink to="/decode" className="nav-link">
+                Reveal
+              </NavLink>
+            </nav>
+
+            <a
+              className="site-header__link"
+              href="https://github.com/coders908"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              github.com/coders908
+            </a>
+          </div>
         </header>
 
         <main className="site-main">
@@ -36,8 +47,18 @@ function App() {
         </main>
 
         <footer className="site-footer">
-          AES-256-GCM encryption, untouched pixels, and everything runs in your browser.
-          Nothing is sent to a server.
+          <span className="site-footer__credit">
+            Built by{' '}
+            <a
+              className="site-footer__link"
+              href="https://github.com/coders908"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              github.com/coders908
+            </a>{' '}
+            <span className="site-footer__author">(Neriya)</span>
+          </span>
         </footer>
       </div>
     </HashRouter>

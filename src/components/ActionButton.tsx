@@ -10,7 +10,7 @@ interface ActionButtonProps {
   busyLabel?: string;
   successLabel: string;
   idleIcon: ReactNode;
-  onAction: () => Promise<boolean>;
+  onAction: (reportProgress: (ratio: number) => void) => Promise<boolean>;
   disabled?: boolean;
   successHoldMs?: number;
   className?: string;
@@ -28,6 +28,7 @@ function ActionButton({
   className,
 }: ActionButtonProps) {
   const [phase, setPhase] = useState<ActionPhase>('idle');
+  const [progress, setProgress] = useState<number | null>(null);
   const holdTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -51,6 +52,7 @@ function ActionButton({
     }
 
     clearHoldTimer();
+    setProgress(null);
 
     if (busyLabel) {
       setPhase('busy');
@@ -59,17 +61,21 @@ function ActionButton({
     let succeeded = false;
 
     try {
-      succeeded = await onAction();
+      succeeded = await onAction((ratio) => {
+        setProgress(Math.min(1, Math.max(0, ratio)));
+      });
     } catch {
       succeeded = false;
     }
 
     if (!succeeded) {
       setPhase('idle');
+      setProgress(null);
       return;
     }
 
     setPhase('success');
+    setProgress(null);
     holdTimerRef.current = window.setTimeout(() => {
       setPhase('idle');
       holdTimerRef.current = null;
@@ -77,6 +83,7 @@ function ActionButton({
   };
 
   const labelClasses = `action-button action-button--${variant}${className ? ` ${className}` : ''}`;
+  const determinatePercent = progress === null ? null : Math.round(progress * 100);
 
   return (
     <button
@@ -86,6 +93,14 @@ function ActionButton({
       onClick={() => void runAction()}
       disabled={disabled || phase === 'busy'}
     >
+      {determinatePercent !== null ? (
+        <span
+          className="action-button__progress"
+          style={{ transform: `scaleX(${progress})` }}
+          aria-hidden="true"
+        />
+      ) : null}
+
       <span className="action-button__icons" aria-hidden="true">
         <span className="action-button__icon" data-active={phase === 'idle'}>
           {idleIcon}
@@ -104,6 +119,9 @@ function ActionButton({
         </span>
         <span className="action-button__label" data-active={phase === 'busy'} aria-hidden={phase !== 'busy'}>
           {busyLabel ?? idleLabel}
+          {determinatePercent !== null ? (
+            <span className="action-button__percent mono"> {determinatePercent}%</span>
+          ) : null}
         </span>
         <span className="action-button__label" data-active={phase === 'success'} aria-hidden={phase !== 'success'}>
           {successLabel}

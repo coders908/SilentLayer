@@ -3,6 +3,10 @@ const DEVELOPMENT_FALLBACK_SECRET = 'silentlayer-default-workspace-key-change-me
 const KEY_DERIVATION_PURPOSE = 'silentlayer/v5/envelope';
 const SCATTER_DERIVATION_PURPOSE = 'silentlayer/v5/carrier-scatter';
 
+export const PASSPHRASE_ITERATIONS = 310_000;
+
+export const MIN_PASSPHRASE_LENGTH = 8;
+
 let cachedWorkspaceSecret: string | null = null;
 
 export function getWorkspaceSecret(): string {
@@ -19,6 +23,37 @@ export function getWorkspaceSecret(): string {
 
 export function isUsingDevelopmentKey(): boolean {
   return getWorkspaceSecret() === DEVELOPMENT_FALLBACK_SECRET;
+}
+
+export function isValidPassphrase(passphrase: string): boolean {
+  return passphrase.trim().length >= MIN_PASSPHRASE_LENGTH;
+}
+
+export async function derivePassphraseKey(
+  passphrase: string,
+  salt: Uint8Array,
+): Promise<CryptoKey> {
+  const passphraseBytes = new TextEncoder().encode(passphrase);
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    passphraseBytes,
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  );
+
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      hash: 'SHA-256',
+      salt: salt as BufferSource,
+      iterations: PASSPHRASE_ITERATIONS,
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  );
 }
 
 async function importWorkspaceKeyMaterial(): Promise<CryptoKey> {

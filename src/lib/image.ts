@@ -9,6 +9,8 @@ export interface LoadedImage {
 
 const PNG_SIGNATURE_BYTES = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
+const ANIMATED_FORMATS = new Set(['image/gif', 'image/apng']);
+
 function hasPngSignature(bytes: Uint8Array): boolean {
   return PNG_SIGNATURE_BYTES.every((signatureByte, index) => bytes[index] === signatureByte);
 }
@@ -43,6 +45,12 @@ export async function loadImageFile(file: File): Promise<LoadedImage> {
     throw new Error('The selected file is not an image.');
   }
 
+  if (ANIMATED_FORMATS.has(file.type)) {
+    throw new Error(
+      'Animated images are not supported because only one frame can be carried. Use a still PNG or JPEG.',
+    );
+  }
+
   const bitmap = await decodeFileToBitmap(file);
   const canvas = createCanvas(bitmap.width, bitmap.height);
   const context = get2dContext(canvas);
@@ -64,10 +72,6 @@ export async function loadImageFile(file: File): Promise<LoadedImage> {
 
 export async function loadFileBytes(file: File): Promise<Uint8Array> {
   return new Uint8Array(await file.arrayBuffer());
-}
-
-export function blobFromBytes(bytes: Uint8Array, mimeType: string): Blob {
-  return new Blob([bytes as BlobPart], { type: mimeType });
 }
 
 export function encodeImageDataToPng(imageData: ImageData): Promise<Blob> {

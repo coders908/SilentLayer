@@ -1,7 +1,7 @@
 
 export const BLOCK_SIZE = 8;
 
-const QUANTIZATION_STEP = 40;
+export const QUANTIZATION_STEP = 40;
 
 const DITHER_LOW = -QUANTIZATION_STEP / 4;
 const DITHER_HIGH = QUANTIZATION_STEP / 4;
@@ -28,6 +28,10 @@ const DCT_COSINE = (() => {
 
   return table;
 })();
+
+const PROGRESS_REPORT_INTERVAL_BLOCKS = 256;
+
+export type ProgressReporter = (completedRatio: number) => void;
 
 function createKeyedRandom(seed: number): () => number {
   let state = seed >>> 0;
@@ -183,51 +187,16 @@ export interface LuminancePlane {
   values: Float32Array;
 }
 
-export function toLuminancePlane(imageData: ImageData): LuminancePlane {
-  const values = new Float32Array(imageData.width * imageData.height);
-
-  for (let pixel = 0; pixel < values.length; pixel++) {
-    const dataIndex = pixel * 4;
-    values[pixel] =
-      0.299 * imageData.data[dataIndex] +
-      0.587 * imageData.data[dataIndex + 1] +
-      0.114 * imageData.data[dataIndex + 2];
-  }
-
-  return { width: imageData.width, height: imageData.height, values };
-}
-
-export function applyLuminanceDelta(
-  imageData: ImageData,
-  original: LuminancePlane,
-  modified: LuminancePlane,
-): ImageData {
-  const output = new ImageData(
-    new Uint8ClampedArray(imageData.data),
-    imageData.width,
-    imageData.height,
-  );
-
-  for (let pixel = 0; pixel < modified.values.length; pixel++) {
-    const delta = modified.values[pixel] - original.values[pixel];
-
-    if (delta === 0) {
-      continue;
-    }
-
-    const dataIndex = pixel * 4;
-    output.data[dataIndex] = output.data[dataIndex] + delta;
-    output.data[dataIndex + 1] = output.data[dataIndex + 1] + delta;
-    output.data[dataIndex + 2] = output.data[dataIndex + 2] + delta;
-  }
-
-  return output;
+interface PendingWrite {
+  coefficientOffset: number;
+  bitValue: number;
 }
 
 export function embedBitsIntoPlane(
   plane: LuminancePlane,
   bits: Uint8Array,
   scatterSeed: number,
+  onProgress?: ProgressReporter,
 ): LuminancePlane {
   const geometry = getCarrierGeometry(plane.width, plane.height);
   const neededChips = bits.length * SPECTRAL_REPETITION;
@@ -238,13 +207,7 @@ export function embedBitsIntoPlane(
 
   const output = new Float32Array(plane.values);
   const slotOrder = buildSlotOrder(geometry.chipCount, scatterSeed);
-
-  interface CoefficientsWrite {
-    coefficientOffset: number;
-    bitValue: number;
-  }
-
-  const writesByBlock = new Map<number, CoefficientsWrite[]>();
+  const writesByBlock = new Map<number, PendingWrite[]>();
 
   for (let chip = 0; chip < neededChips; chip++) {
     const slot = slotOrder[chip];
@@ -265,6 +228,7 @@ export function embedBitsIntoPlane(
 
   const pixels = new Float64Array(BLOCK_SIZE * BLOCK_SIZE);
   const coefficients = new Float64Array(BLOCK_SIZE * BLOCK_SIZE);
+  let processedBlocks = 0;
 
   for (const [blockIndex, blockWrites] of writesByBlock) {
     const originX = (blockIndex % geometry.blocksAcross) * BLOCK_SIZE;
@@ -294,7 +258,15 @@ export function embedBitsIntoPlane(
         output[pixelIndex] = Math.min(255, Math.max(0, pixels[row * BLOCK_SIZE + column]));
       }
     }
+
+    processedBlocks++;
+
+    if (onProgress && processedBlocks % PROGRESS_REPORT_INTERVAL_BLOCKS === 0) {
+      onProgress(processedBlocks / writesByBlock.size);
+    }
   }
+
+  onProgress?.(1);
 
   return { width: plane.width, height: plane.height, values: output };
 }
@@ -303,6 +275,7 @@ export function extractChipsFromPlane(
   plane: LuminancePlane,
   bitCount: number,
   scatterSeed: number,
+  onProgress?: ProgressReporter,
 ): Float32Array {
   const geometry = getCarrierGeometry(plane.width, plane.height);
   const neededChips = bitCount * SPECTRAL_REPETITION;
@@ -316,6 +289,7 @@ export function extractChipsFromPlane(
   const pixels = new Float64Array(BLOCK_SIZE * BLOCK_SIZE);
   const coefficients = new Float64Array(BLOCK_SIZE * BLOCK_SIZE);
   const decodedBlocks = new Map<number, Float64Array>();
+  const blocksNeeded = Math.ceil(neededChips / CARRIER_COEFFICIENTS.length);
 
   for (let chip = 0; chip < neededChips; chip++) {
     const slot = slotOrder[chip];
@@ -338,11 +312,17 @@ export function extractChipsFromPlane(
       forwardBlockDct(pixels, coefficients);
       blockCoefficients = new Float64Array(coefficients);
       decodedBlocks.set(blockIndex, blockCoefficients);
+
+      if (onProgress && decodedBlocks.size % PROGRESS_REPORT_INTERVAL_BLOCKS === 0) {
+        onProgress(Math.min(1, decodedBlocks.size / blocksNeeded));
+      }
     }
 
     const [row, column] = CARRIER_COEFFICIENTS[coefficientIndex];
     chips[chip] = softDemodulate(blockCoefficients[row * BLOCK_SIZE + column]);
   }
+
+  onProgress?.(1);
 
   return chips;
 }
