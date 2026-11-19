@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ssr
+.vite
+
+# Environment secrets. A committed workspace key would let anyone who reads the
+# repo decrypt every image made with this build, so these never leave the machine.
+.env
+.env.*
+!.env.example
+
+*.local
+.DS_Store
+npm-debug.log*
