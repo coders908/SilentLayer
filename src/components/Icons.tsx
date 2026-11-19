@@ -100,6 +100,25 @@ export function ChevronDownIcon({ size = 24, className }: IconProps) {
   );
 }
 
+export function MenuIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg {...createIconProps(size)} className={className}>
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ size = 24, className }: IconProps) {
+  return (
+    <svg {...createIconProps(size)} className={className}>
+      <path d="m6 6 12 12" />
+      <path d="m18 6-12 12" />
+    </svg>
+  );
+}
+
 export function AlertIcon({ size = 24, className }: IconProps) {
   return (
     <svg {...createIconProps(size)} className={className}>

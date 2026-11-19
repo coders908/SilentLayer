@@ -1,9 +1,13 @@
 # SilentLayer
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](./package.json)
+[![Version](https://img.shields.io/badge/version-1.0.3-blue.svg)](./package.json)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6.svg)](./tsconfig.json)
+
+<p align="center">
+  <img src="./ui.png" alt="SilentLayer interface" width="100%">
+</p>
 
 Hide an encrypted message, and optionally a whole file, inside a photograph. Recover it later from
 the image alone. Everything runs in the browser: no upload, no account, no server.
