@@ -8,14 +8,29 @@ function App() {
     <HashRouter>
       <div className="app-shell">
         <header className="site-header">
-          <Link to="/" className="brand">
-            <span className="brand-mark">
-              <MarkGlyph size={14} />
+          <div className="site-header__brand-group">
+            <Link to="/" className="brand">
+              <span className="brand-mark">
+                <MarkGlyph size={14} />
+              </span>
+              <span className="brand-text">
+                <strong>SilentLayer</strong>
+              </span>
+            </Link>
+
+            <span className="site-header__credit">
+              Built by{' '}
+              <a
+                className="site-header__credit-link"
+                href="https://github.com/coders908"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                github.com/coders908
+              </a>{' '}
+              <span className="site-header__credit-author">(Neriya)</span>
             </span>
-            <span className="brand-text">
-              <strong>SilentLayer</strong>
-            </span>
-          </Link>
+          </div>
 
           <div className="site-header__aside">
             <nav className="site-nav" aria-label="Main navigation">
@@ -26,15 +41,6 @@ function App() {
                 Reveal
               </NavLink>
             </nav>
-
-            <a
-              className="site-header__link"
-              href="https://github.com/coders908"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              github.com/coders908
-            </a>
           </div>
         </header>
 

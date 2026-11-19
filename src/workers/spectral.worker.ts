@@ -1,15 +1,3 @@
-/**
- * Off-main-thread runner for the DCT carrier.
- *
- * Embedding into a 12 MP photo touches roughly 190k blocks, each needing a
- * forward and an inverse 8x8 DCT. Doing that on the main thread freezes the
- * page for tens of seconds, so all of it happens here instead and the UI only
- * receives progress ratios.
- *
- * The worker scope is typed structurally rather than through `lib: webworker`
- * because this project compiles with the DOM lib, and the two declare
- * conflicting globals.
- */
 
 import {
   decideBitsFromChips,
