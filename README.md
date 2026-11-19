@@ -9,11 +9,19 @@
   <img src="./ui.png" alt="SilentLayer interface" width="100%">
 </p>
 
+<p align="center">
+  <a href="https://silentlayer.dpdns.org"><strong>Try the live demo at silentlayer.dpdns.org</strong></a>
+</p>
+
 Hide an encrypted message, and optionally a whole file, inside a photograph. Recover it later from
 the image alone. Everything runs in the browser: no upload, no account, no server.
 
 SilentLayer is a static React + TypeScript app. Encrypt a payload, write it into an image, share the
 image, and let the recipient drop it back in to read what was inside.
+
+You do not have to install anything to try it. The hosted demo at
+[silentlayer.dpdns.org](https://silentlayer.dpdns.org) runs the exact production build: drop an
+image, hide a message, download it, then reload the page and reveal it again.
 
 ## Why SilentLayer
 
@@ -88,7 +96,7 @@ your own deployment.
 npm run dev
 ```
 
-Open the printed URL, usually `http://localhost:5173`.
+Open the printed URL, usually `http://localhost:9878`.
 
 ### Build
 
