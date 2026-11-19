@@ -214,7 +214,7 @@ function EncodePage() {
           },
           {
             label: 'Write a message or attach a file',
-            detail: 'Text, a PDF, a ZIP — it all gets packed in before anything is written.',
+            detail: 'Text, a PDF, a ZIP - it all gets packed in before anything is written.',
           },
           {
             label: 'Download the sealed image',
@@ -265,7 +265,7 @@ function EncodePage() {
                 <div>
                   <dt>Resilient layer capacity</dt>
                   <dd className="mono" dir="ltr">
-                    {ruggedCapacity ? formatBytes(ruggedCapacity.usableBytes) : '—'}
+                    {ruggedCapacity ? formatBytes(ruggedCapacity.usableBytes) : '-'}
                   </dd>
                 </div>
                 <div>
@@ -344,7 +344,7 @@ function EncodePage() {
               <AlertIcon size={16} className="alert__icon" />
               <span>
                 This image is too small to carry the recompression-resilient layer. The content
-                will be hidden in the signature-free layer only — it survives any viewing, but
+                will be hidden in the signature-free layer only - it survives any viewing, but
                 not a conversion to JPEG.
               </span>
             </p>
@@ -395,7 +395,7 @@ function EncodePage() {
                   <WavesIcon size={14} className="fact__icon" />
                   <span>
                     {result.ruggedChannelUsed
-                      ? 'The resilient layer is active — it survives strong JPEG recompression.'
+                      ? 'The resilient layer is active - it survives strong JPEG recompression.'
                       : 'The resilient layer did not fit because the content is too large, so only the signature-free layer was written.'}
                   </span>
                 </li>

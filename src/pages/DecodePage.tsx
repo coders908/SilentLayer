@@ -147,7 +147,7 @@ function DecodePage() {
       <PageHero
         eyebrow="Extract"
         headline="Open a sealed image."
-        lead="Drop in any image this workspace produced and read what is inside it. Detection and decryption run on your machine — nothing is uploaded, and the picture itself never changes."
+        lead="Drop in any image this workspace produced and read what is inside it. Detection and decryption run on your machine - nothing is uploaded, and the picture itself never changes."
         steps={[
           {
             label: 'Drop the image',
@@ -230,8 +230,8 @@ function DecodePage() {
             <div className="decoded">
               <p className="channel-badge">
                 {result.channel === 'stealth'
-                  ? 'Read from the signature-free layer — an exact, byte-perfect recovery'
-                  : 'Read from the resilient layer — the image was recompressed and the content survived'}
+                  ? 'Read from the signature-free layer - an exact, byte-perfect recovery'
+                  : 'Read from the resilient layer - the image was recompressed and the content survived'}
               </p>
 
               {result.message ? (

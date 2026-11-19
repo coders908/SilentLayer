@@ -160,6 +160,6 @@ export async function decompressSecret(compressed: Uint8Array): Promise<Uint8Arr
 
     return new Uint8Array(await new Response(stream).arrayBuffer());
   } catch {
-    throw new SecretPayloadError('Could not decompress the content — it may be corrupt.');
+    throw new SecretPayloadError('Could not decompress the content - it may be corrupt.');
   }
 }
